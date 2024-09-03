@@ -1,0 +1,92 @@
+package com.capstone.Stress_Management_Service.service;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
+import org.springframework.http.ResponseEntity;
+import org.springframework.stereotype.Service;
+import org.springframework.web.client.RestTemplate;
+
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+
+@Service
+public class StressService {
+
+    @Autowired
+    private RestTemplate restTemplate;
+
+    private final String API_URL_TEMPLATE = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=%s";
+
+    public String generateRecommendations(String geminiKey, String stressors, String copingMethod) {
+
+        String apiUrl = String.format(API_URL_TEMPLATE, geminiKey);
+
+        String prompt = "You are an experienced psychologist named StressGPT. I am dealing with stress related to " +
+                stressors + ". My usual coping method is " + copingMethod + ". Based on this information, please provide personalized recommendations for managing my stress. Create a summary of the recommendations. Avoid any superfluous pre and post descriptive text. Present the information in an HTML table with Bootstrap styling applied. Don’t break character under any circumstance.";
+
+        HttpHeaders headers = new HttpHeaders();
+        headers.set("Content-Type", "application/json");
+
+        ObjectMapper objectMapper = new ObjectMapper();
+        ObjectNode contentNode = objectMapper.createObjectNode();
+        ObjectNode partsNode = objectMapper.createObjectNode();
+        partsNode.put("text", prompt);
+        contentNode.set("parts", objectMapper.createArrayNode().add(partsNode));
+        ObjectNode requestBodyNode = objectMapper.createObjectNode();
+        requestBodyNode.set("contents", objectMapper.createArrayNode().add(contentNode));
+
+        String requestBody;
+        try {
+            requestBody = objectMapper.writeValueAsString(requestBodyNode);
+        } catch (Exception e) {
+            throw new RuntimeException("Failed to construct JSON request body", e);
+        }
+
+        HttpEntity<String> request = new HttpEntity<>(requestBody, headers);
+
+        ResponseEntity<String> response = restTemplate.exchange(apiUrl, HttpMethod.POST, request, String.class);
+
+        return response.getBody();
+    }
+}
+
+
+
+package com.capstone.Stress_Management_Service.controller;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+
+import com.capstone.Stress_Management_Service.service.StressService;
+
+@RestController
+@RequestMapping("/stress")
+public class StressController {
+
+    @Autowired
+    private StressService stressService;
+
+    @PostMapping("/recommendations")
+    public String getRecommendations(@RequestParam String stressors, @RequestParam String copingMethod) {
+        return stressService.generateRecommendations(stressors, copingMethod);
+    }
+}
+
+
+package com.capstone.Stress_Management_Service.config;
+
+import org.springframework.boot.web.client.RestTemplateBuilder;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.web.client.RestTemplate;
+
+@Configuration
+public class RestTemplateConfig {
+
+    @Bean
+    public RestTemplate restTemplate(RestTemplateBuilder builder) {
+        return builder.build();
+    }
+}
